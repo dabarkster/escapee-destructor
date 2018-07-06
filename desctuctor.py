@@ -8,6 +8,8 @@ from gpiozero import LED
 from gpiozero import Button
 from Adafruit_LED_Backpack import SevenSegment
 
+pygame.init()
+
 add10 = False
 start = False
 runit = True
@@ -21,8 +23,13 @@ topicTimer   = topic + "/timer"
 broker_address="192.168.56.220" 
 client = mqtt.Client("client") #create new instance
 
+photo_path = '/home/pi/Pictures'
+sfx_path   = '/home/pi/Music'
+sfx_file = sfx_path + "/beep.wav"
+sfx_beep = pygame.mixer.Sound(sfx_file)
 #led = LED(17)
 #print(led.value)
+
 
 segment = SevenSegment.SevenSegment(address=0x71)
 # Initialize the display. Must be called once before using the display.
@@ -43,8 +50,8 @@ def main():
     client.publish(topicStatus,"Starting")#publish
     time.sleep(1) #slight delay to show starting status
     client.publish(topicStatus,"Waiting")
-    while runit == True:
 
+    while runit == True:
         if start == False:
             #butt = Button(17)
             #print(led)
@@ -61,6 +68,7 @@ def main():
                 strTime = formatTime(x)
                 client.publish(topicTimer,strTime)
                 displayTime(x)
+                sfx_beep.play()
                 if add10 == True:
                     x = x + 10
                     add10 = False #add only once
