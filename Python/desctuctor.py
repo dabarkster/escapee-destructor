@@ -26,46 +26,6 @@ GPIO.setup(WHITE, GPIO.IN, pull_up_down = GPIO.PUD_UP)
 wire_state = 0
 phase = 0
 
-def check_wires():
-    global phase
-    global wire_state
-
-    yellow_state = GPIO.input(YELLOW)
-    blue_state = GPIO.input(BLUE)
-    green_state = GPIO.input(GREEN)
-    white_state = GPIO.input(WHITE)
-    
-    wire_state = 1*int(blue_state) + 2*int(green_state) + 4*int(yellow_state) + 8*int(white_state)
-    #print(wire_state)
-
-    if blue_state:
-        if wire_state != 1 and phase == 0:
-            phase = -1
-        else:
-            phase = 1
-
-    if green_state:
-        if wire_state != 3 and phase <= 1:
-            phase = -1
-        else:
-            phase = 2
-
-    if yellow_state:
-        if wire_state != 7 and not phase <= 2:
-            phase = -1
-        else:
-            phase = 3
-
-    if white_state:
-        if wire_state != 15 and not phase <= 3:
-            phase = -1
-        else:
-            phase = 4
- 
-    return phase
-
-    #print(str(blue_state) + " " + str(green_state) + " " +str(yellow_state) + " " +  str(white_state))
-
 
 
 pygame.init()
@@ -73,7 +33,8 @@ pygame.init()
 add10 = False
 start = False
 runit = True
-x = 2
+starttime = 3600
+x = starttime
 
 topic        = "escapee/destructor"
 topicAll     = topic + "/#"
@@ -81,10 +42,10 @@ topicStatus  = topic + "/status"
 topicCommand = topic + "/command"
 topicTimer   = topic + "/timer"
 topicWarning = topic + "/warning"
+topicPhase   = topic + "/phase"
 
 broker_address="192.168.56.220" 
 client = mqtt.Client("client") #create new instance
-
 
 #led = LED(17)
 #print(led.value)
@@ -137,7 +98,14 @@ def main():
                 client.publish(topicStatus,"Running")
                 while x >= 0:
                     phase = check_wires()
-                    print(phase)
+                    if phase == -1:
+                        runit = False
+                        start = False
+                        print("BOOM")
+                        client.publish(topicStatus,"BOOM")
+                    elif phase == 4:
+                        client.publish(topicStatus,"Winner")
+
                     segment.set_colon(1)
                     segment.write_display()
                     time.sleep(0.5) #used to blink colon
@@ -159,6 +127,8 @@ def main():
                         client.publish(topicWarning,"45")
 
                     x -= 1
+                    if x == 0:
+                        client.publish(topicStatus,"BOOM")
 
                 print("while end")
                 runit = False
@@ -166,6 +136,47 @@ def main():
     print("end")
     client.loop_stop()
     client.disconnect()
+
+def check_wires():
+    global phase
+    global wire_state
+
+    yellow_state = GPIO.input(YELLOW)
+    blue_state = GPIO.input(BLUE)
+    green_state = GPIO.input(GREEN)
+    white_state = GPIO.input(WHITE)
+    
+    wire_state = 1*int(blue_state) + 2*int(green_state) + 4*int(yellow_state) + 8*int(white_state)
+    #print(wire_state)
+
+    if blue_state:
+        if wire_state != 1 and phase == 0:
+            phase = -1
+        else:
+            phase = 1
+
+    if green_state:
+        if wire_state != 3 and phase != 1:
+            phase = -1
+        else:
+            phase = 2
+
+    if yellow_state:
+        if wire_state != 7 and phase != 2:
+            phase = -1
+        else:
+            phase = 3
+
+    if white_state:
+        if wire_state != 15 and phase != 3:
+            phase = -1
+        else:
+            phase = 4
+ 
+    client.publish(topicPhase, phase)
+    return phase
+
+    #print(str(blue_state) + " " + str(green_state) + " " +str(yellow_state) + " " +  str(white_state))
 
 def play_mp3(file):
     #name = sound_path + "bio" + kid + ".mp3"
@@ -217,12 +228,14 @@ def on_message_command(client, userdata, msg):
     global start
     global runit
     global x
+    global phase
     
     msg.payload = msg.payload.decode("utf-8")
 
     if "add" in msg.payload:
         client.publish(topicStatus,"Adding Time")  # can use node to write this?
-        #add10 = True
+        x += 600
+        print(x)
         
     if "go" in msg.payload:
         client.publish(topicStatus,"Running")
@@ -239,11 +252,14 @@ def on_message_command(client, userdata, msg):
     if "reset" in msg.payload:
         runit = True
         start = False
-        x = 100
+        x = starttime
+        phase = 0
+
         client.publish(topicStatus,"Resetting")
         strTime = formatTime(x)
         client.publish(topicTimer,strTime)
         client.publish(topicStatus,"Waiting")
+        client.publish(topicPhase, 0)
     
     if "end" in msg.payload:
         client.publish(topicStatus,"Done")
